@@ -235,6 +235,12 @@ else
 {
     foreach ($VM in $VMName)
     {
+        if (get-vm -Name $VM -ErrorAction SilentlyContinue)
+        {
+        Write-Warning -Message "$($VM): Virtual Machine already exists!"
+        break
+        }
+        
         Write-Verbose -Message "$($VM): Creating Virtual Machine" -Verbose
         $null = New-VM -Name $VM -Generation 1 -Path $VMsLocation -SwitchName $VirtualSwitch -NoVHD
  
