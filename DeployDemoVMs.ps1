@@ -4,11 +4,13 @@
 
     [string]$ImagesLocation = 'C:\Hyper-V\VMs\Images',
 
+    [string]$VMsLocation = 'C:\Hyper-V\VMs',
+
     [string]$VirtualSwitch = 'Private Switch',
 
     [string]$Processors = '4',
 
-    [string]$MemoryGBs = '2'
+    [System.Int64]$Memory = 2GB
 )
 
 #region runas administrator
@@ -136,7 +138,7 @@ if (((Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).state) 
 
     if ((Read-Question -Question "Would you like to Enable Hyper-V?") -eq "0")
     {
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+        $null = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
 
         if ((Read-Question -Question "Would you like to restart your computer to finish the Hyper-V Installation?") -eq "0")
         {
@@ -184,7 +186,7 @@ if (!(Get-VMSwitch | ? {$_.name -eq $VirtualSwitch}))
     Write-Warning "Hyper-V: Switch [$($VirtualSwitch)] could not be found!"
     if ((Read-Question -Question "Would you like to create the virtual switch [$($VirtualSwitch)]?") -eq "0")
     {
-        New-VMSwitch -Name 'Private Switch' -SwitchType Private
+        $null = New-VMSwitch -Name 'Private Switch' -SwitchType Private
     }
     else
     {
@@ -218,15 +220,14 @@ try
 }
 catch
 {}
+
+$imageextension = $Imagename.Split(".") | select -last 1
+
 if (!$Imagename)
 {
 Write-Warning "No images could be found in location $ImagesLocation, please select a different location using [DeployDemoVMs.ps1 -ImagesLocation 'Your Images Location']"
 break
 }
-#endregion
-
-#region set image extension
-$imageextension = $Imagename.Split(".") | select -last 1
 #endregion
 
 #region create virtual machines
@@ -235,22 +236,25 @@ else
     foreach ($VM in $VMName)
     {
         Write-Verbose -Message "$($VM): Creating Virtual Machine" -Verbose
-        New-VM -Name $VM -Generation 1 -Path 'C:\Hyper-V\VMs' -SwitchName $VirtualSwitch -NoVHD
+        $null = New-VM -Name $VM -Generation 1 -Path $VMsLocation -SwitchName $VirtualSwitch -NoVHD
  
         Write-Verbose -Message "$($VM): Creating differencing disk" -Verbose
-        New-VHD -Path "C:\Hyper-V\VMs\$VM\C-Drive.$($imageextension)" -ParentPath "C:\Hyper-V\VMs\Images\$Imagename" -Differencing
+        $null = New-VHD -Path "$VMsLocation\$VM\C-Drive.$($imageextension)" -ParentPath "$ImagesLocation\$Imagename" -Differencing
  
         Write-Verbose -Message "$($VM): Adding differencing disk to Virtual Machine" -Verbose
-        Get-VM -name $VM | Add-VMHardDiskDrive -Path "C:\Hyper-V\VMs\$VMName\C-Drive.$($imageextension)"
+        $null = Get-VM -name $VM | Add-VMHardDiskDrive -Path "$VMsLocation\$VM\C-Drive.$($imageextension)"
  
-        Write-Verbose -Message "$($VM): Changing configuration to $Processors vCPUs and $($MemoryGBs)GB Memory" -Verbose
-        Get-VM -name $VM | Set-VM -ProcessorCount $Processors -DynamicMemory -MemoryMaximumBytes ($MemoryGBs + "GB") -Passthru | start-VM
+        Write-Verbose -Message "$($VM): Changing configuration to $Processors vCPUs and $Memory Memory" -Verbose
+        $null = Get-VM -name $VM | Set-VM -ProcessorCount $Processors -DynamicMemory -MemoryMaximumBytes $Memory -Passthru | start-VM
  
         if ($Snapshot)
         {
             Write-Verbose -Message "$($VM): Creating 'Clean Build' Snapshot" -Verbose
-            Get-VM -name $VM | Checkpoint-VM -SnapshotName 'Clean Build'
+            $null = Get-VM -name $VM | Checkpoint-VM -SnapshotName 'Clean Build'
         }
     }
 }
+
+Write-Verbose -Message "Deploy Completed!" -Verbose
+pause
 #endregion
