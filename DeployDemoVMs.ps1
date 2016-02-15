@@ -2,21 +2,26 @@
     [Parameter(Mandatory = $true)]
     [string[]]$VMName,
 
-    [string]$ImagesLocation = 'C:\Hyper-V\VMs\Images',
+    [string]$ImagesLocation = 'D:\Hyper-V\Images',
 
-    [string]$VMsLocation = 'C:\Hyper-V\VMs',
+    [string]$VMsLocation = 'D:\Hyper-V\VMs',
 
-    [string]$VirtualSwitch = 'Private Switch',
+    [Parameter(Mandatory = $true)]
+    [string]$VirtualSwitchName,
 
-    [string]$Processors = '4',
+    [Parameter(Mandatory = $true)]
+    [int]$ProcessorCount,
+
+    [Parameter(Mandatory = $true)]
+    [int]$Generation,
 
     [System.Int64]$Memory = 2GB
 )
 
 #region runas administrator
-If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
+If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator'))
 {   
-	Write-Warning "System: This script is currently not running as administrator. Script will now automatically restart."
+	Write-Warning 'System: This script is currently not running as administrator. Script will now automatically restart.'
     pause
     $arguments = "& '" + $myinvocation.mycommand.definition + "'"
 	Start-Process powershell -Verb runAs -ArgumentList $arguments
@@ -24,7 +29,7 @@ If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 #endregion
 
-#region functions
+#region helper-functions
 Function Show-Dropdownbox 
 {
     <#
@@ -124,37 +129,38 @@ Function Read-Question
     [string]$Question
     )
 
+    $subject = 'Read-Question'
     $yes = New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList '&Yes', ''
     $no = New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList '&No', ''
     $choices = [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no)
-    $Host.UI.PromptForChoice($caption,$Question,$choices,1)
+    $Host.UI.PromptForChoice($subject,$Question,$choices,1)
 }
 #endregion
 
 #region check Hyper-V Role Installed
-if (((Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).state) -ne "Enabled")
+if (((Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).state) -ne 'Enabled')
 {
-    Write-Warning -Message "Hyper-V: Hyper-V Role has not yet been enabled!"
+    Write-Warning -Message 'Hyper-V: Hyper-V Role has not yet been enabled!'
 
-    if ((Read-Question -Question "Would you like to Enable Hyper-V?") -eq "0")
+    if ((Read-Question -Question 'Would you like to Enable Hyper-V?') -eq '0')
     {
         $null = Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
 
-        if ((Read-Question -Question "Would you like to restart your computer to finish the Hyper-V Installation?") -eq "0")
+        if ((Read-Question -Question 'Would you like to restart your computer to finish the Hyper-V Installation?') -eq '0')
         {
             Restart-Computer -Force
             break
         }
         else
         {
-            Write-Warning -Message "Hyper-V: Hyper-V Role has now been installed, however a reboot is required!"
+            Write-Warning -Message 'Hyper-V: Hyper-V Role has now been installed, however a reboot is required!'
             pause
             break
         }
     }
     else
     {
-        Write-Warning -Message "Hyper-V: Hyper-V Role is required to continue. Exiting Script."
+        Write-Warning -Message 'Hyper-V: Hyper-V Role is required to continue. Exiting Script.'
         pause
         break
     }
@@ -162,8 +168,8 @@ if (((Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).state) 
 }
 elseif (((Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).RestartNeeded) -eq $true)
 {
-    Write-Warning -Message "Hyper-V: Hyper-V Role has already been installed, however a reboot is required!"
-    if ((Read-Question -Question "Would you like to restart your computer to finish the Hyper-V Installation?") -eq "0")
+    Write-Warning -Message 'Hyper-V: Hyper-V Role has already been installed, however a reboot is required!'
+    if ((Read-Question -Question 'Would you like to restart your computer to finish the Hyper-V Installation?') -eq '0')
     {
         Restart-Computer -Force
         break
@@ -176,17 +182,17 @@ elseif (((Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).Res
 }
 else
 {
-    Write-Verbose -Message "Hyper-V: Hyper-V Role was found" -Verbose
+    Write-Verbose -Message 'Hyper-V: Hyper-V Role was found' -Verbose
 }
 #endregion
 
 #region check hyper-v switch
-if (!(Get-VMSwitch | ? {$_.name -eq $VirtualSwitch}))
+if (!(Get-VMSwitch | Where-Object {$_.name -eq $VirtualSwitchName}))
 {
-    Write-Warning "Hyper-V: Switch [$($VirtualSwitch)] could not be found!"
-    if ((Read-Question -Question "Would you like to create the virtual switch [$($VirtualSwitch)]?") -eq "0")
+    Write-Warning "Hyper-V: Switch [$($VirtualSwitchName)] could not be found!"
+    if ((Read-Question -Question "Would you like to create the virtual switch [$($VirtualSwitchName)]?") -eq '0')
     {
-        $null = New-VMSwitch -Name 'Private Switch' -SwitchType Private
+        $null = New-VMSwitch -Name $VirtualSwitchName -SwitchType Private
     }
     else
     {
@@ -196,13 +202,13 @@ if (!(Get-VMSwitch | ? {$_.name -eq $VirtualSwitch}))
 }
 else
 {
-    Write-Verbose -Message "Hyper-V: Switch [$($VirtualSwitch)] was found." -Verbose
+    Write-Verbose -Message "Hyper-V: Switch [$($VirtualSwitchName)] was found." -Verbose
 }
 
 #endregion
 
 #region snapshot
-if ((Read-Question -Question "Would you like a snapshot for the Virtual Machines?") -eq "0")
+if ((Read-Question -Question 'Would you like a snapshot for the Virtual Machines?') -eq '0')
 {
     $Snapshot = $true
 }
@@ -216,12 +222,12 @@ else
 try
 {
     # Get image name
-    $Imagename = Show-Dropdownbox -Question "Pick an Image" -Answers (((Get-item "$ImagesLocation\*.vhd*" -ErrorAction SilentlyContinue)).name)
+    $Imagename = Show-Dropdownbox -Question 'Pick an Image' -Answers (((Get-item "$ImagesLocation\*.vhd*" -ErrorAction SilentlyContinue)).name)
 }
 catch
 {}
 
-$imageextension = $Imagename.Split(".") | select -last 1
+$imageextension = $Imagename.Split('.') | Select-Object -last 1
 
 if (!$Imagename)
 {
@@ -242,7 +248,7 @@ else
         }
         
         Write-Verbose -Message "$($VM): Creating Virtual Machine" -Verbose
-        $null = New-VM -Name $VM -Generation 1 -Path $VMsLocation -SwitchName $VirtualSwitch -NoVHD
+        $null = New-VM -Name $VM -Generation $Generation -Path $VMsLocation -SwitchName $VirtualSwitchName -NoVHD
  
         Write-Verbose -Message "$($VM): Creating differencing disk" -Verbose
         $null = New-VHD -Path "$VMsLocation\$VM\C-Drive.$($imageextension)" -ParentPath "$ImagesLocation\$Imagename" -Differencing
@@ -250,8 +256,8 @@ else
         Write-Verbose -Message "$($VM): Adding differencing disk to Virtual Machine" -Verbose
         $null = Get-VM -name $VM | Add-VMHardDiskDrive -Path "$VMsLocation\$VM\C-Drive.$($imageextension)"
  
-        Write-Verbose -Message "$($VM): Changing configuration to $Processors vCPUs and $Memory Memory" -Verbose
-        $null = Get-VM -name $VM | Set-VM -ProcessorCount $Processors -DynamicMemory -MemoryMaximumBytes $Memory -Passthru | start-VM
+        Write-Verbose -Message "$($VM): Changing configuration to $ProcessorCount vCPUs and $($Memory/1gb)GB Memory" -Verbose
+        $null = Get-VM -name $VM | Set-VM -ProcessorCount $ProcessorCount -DynamicMemory -MemoryMaximumBytes $Memory -Passthru | start-VM
  
         if ($Snapshot)
         {
@@ -261,6 +267,6 @@ else
     }
 }
 
-Write-Verbose -Message "Deploy Completed!" -Verbose
+Write-Verbose -Message 'Deploy Completed!' -Verbose
 pause
 #endregion
