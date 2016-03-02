@@ -197,7 +197,7 @@ Function Remove-DemoVMs
 {
     param(
         [Parameter(Mandatory = $true)]
-        [string]$VMNames
+        [string[]]$VMNames
     )
 
     #region runas administrator
