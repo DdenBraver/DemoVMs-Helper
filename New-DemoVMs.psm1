@@ -1,9 +1,14 @@
-﻿param(
+﻿Function New-DemoVMs
+{
+
+param(
     [Parameter(Mandatory = $true)]
     [string[]]$VMName,
 
+    [Parameter(Mandatory = $false)]
     [string]$ImagesLocation = 'D:\Hyper-V\Images',
 
+    [Parameter(Mandatory = $false)]
     [string]$VMsLocation = 'D:\Hyper-V\VMs',
 
     [Parameter(Mandatory = $true)]
@@ -36,8 +41,7 @@ If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 {   
 	Write-Warning 'System: This script is currently not running as administrator. Script will now automatically restart.'
     pause
-    $arguments = "& '" + $myinvocation.mycommand.definition + "'"
-	Start-Process powershell -Verb runAs -ArgumentList $arguments
+	Start-Process powershell -Verb runAs -ArgumentList $myinvocation.mycommand.definition
 	Break
 }
 #endregion
@@ -291,5 +295,5 @@ else
 }
 
 Write-Verbose -Message 'Deploy Completed!' -Verbose
-pause
 #endregion
+}
