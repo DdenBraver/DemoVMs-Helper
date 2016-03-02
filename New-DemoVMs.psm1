@@ -5,12 +5,6 @@ param(
     [Parameter(Mandatory = $true)]
     [string[]]$VMName,
 
-    [Parameter(Mandatory = $false)]
-    [string]$ImagesLocation = 'D:\Hyper-V\Images',
-
-    [Parameter(Mandatory = $false)]
-    [string]$VMsLocation = 'D:\Hyper-V\VMs',
-
     [Parameter(Mandatory = $true)]
     [string]$VirtualSwitchName,
 
@@ -19,6 +13,12 @@ param(
 
     [Parameter(Mandatory = $true)]
     [int]$Generation,
+
+    [Parameter(Mandatory = $false)]
+    [string]$ImagesLocation = 'D:\Hyper-V\Images',
+
+    [Parameter(Mandatory = $false)]
+    [string]$VMsLocation = 'D:\Hyper-V\VMs',
 
     [Parameter(Mandatory = $false)]
     [int]$Datadisks = 0,
