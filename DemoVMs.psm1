@@ -45,114 +45,6 @@ If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 }
 #endregion
 
-#region helper-functions
-Function Show-Dropdownbox 
-{
-    <#
-            .SYNOPSIS
-            Gives a pop-up to select data, that can be used in other scripts
-            .DESCRIPTION
-            The Show-Dropdownbox function is used to provide a friendly way for users to input data into script variables.
-            This script is for example used during the postbuild script, so that information can be injected in a friendly way.
-            .PARAMETER Question
-            The question you want to have displayed on screen.
-            .PARAMETER Answers
-            The answers you would like the users to have as options. (Static list)
-            .EXAMPLE
-            $variable1 = Show-Dropdownbox -question "Select one of the following:" -answers "A","B","C"
-            Create a question and write the output to variable $variable1
-            .NOTES
-            This function was created for friendly input into scripts that are performed manually.
-            Do not use this function in scripts that should run in the background.
-            This script was written by Danny den Braver @2013, for questions please contact danny@denbraver.com
-    #>
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Question,
-        [Parameter(Mandatory = $true)]
-        [array]$Answers
-    )
-
-    [void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')
-    [void][System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') 
-
-    $objForm = New-Object -TypeName System.Windows.Forms.Form 
-    $objForm.Text = 'Take your selection'
-    $objForm.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (300, 275) 
-    $objForm.StartPosition = 'CenterScreen'
-    $objForm.KeyPreview = $true
-    $objForm.Add_KeyDown({
-            if ($_.KeyCode -eq 'Enter') 
-            {
-                $objForm.Close()
-            }
-    })
-    $objForm.Add_KeyDown({
-            if ($_.KeyCode -eq 'Escape') 
-            {
-                $objForm.Close()
-            }
-    })
-    
-    $OKButton = New-Object -TypeName System.Windows.Forms.Button
-    $OKButton.Location = New-Object -TypeName System.Drawing.Size -ArgumentList (75, 200)
-    $OKButton.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (75, 23)
-    $OKButton.Text = 'OK'
-    $OKButton.Add_Click({
-            $objForm.Close()
-    })
-    $objForm.Controls.Add($OKButton)
-
-    $CancelButton = New-Object -TypeName System.Windows.Forms.Button
-    $CancelButton.Location = New-Object -TypeName System.Drawing.Size -ArgumentList (150, 200)
-    $CancelButton.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (75, 23)
-    $CancelButton.Text = 'Cancel'
-    $CancelButton.Add_Click({
-            $objForm.Close()
-    })
-    $objForm.Controls.Add($CancelButton)
-
-    $objLabel = New-Object -TypeName System.Windows.Forms.Label
-    $objLabel.Location = New-Object -TypeName System.Drawing.Size -ArgumentList (10, 20) 
-    $objLabel.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (280, 20) 
-    $objLabel.Text = $Question
-    $objForm.Controls.Add($objLabel) 
-
-    $objListBox = New-Object -TypeName System.Windows.Forms.ListBox 
-    $objListBox.Location = New-Object -TypeName System.Drawing.Size -ArgumentList (10, 40) 
-    $objListBox.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (275, 20) 
-    $objListBox.Height = 150
-    foreach ($answer in $Answers) 
-    {
-        [void]$objListBox.Items.Add($answer)
-    }
-
-    $objListBox.SelectedItem = $objListBox.Items[0]
-    $objForm.Controls.Add($objListBox) 
-    $objForm.Topmost = $true
-    $objForm.Add_Shown({
-            $objForm.Activate()
-    })
-    [void]$objForm.ShowDialog()
-
-    $objListBox.SelectedItem
-}
-
-Function Read-Question
-{
-    param(
-    [Parameter(Mandatory = $true)]
-    [string]$Question
-    )
-
-    $subject = 'Read-Question'
-    $yes = New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList '&Yes', ''
-    $no = New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList '&No', ''
-    $choices = [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no)
-    $Host.UI.PromptForChoice($subject,$Question,$choices,1)
-}
-#endregion
-
 #region check Hyper-V Role Installed
 if (((Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V).state) -ne 'Enabled')
 {
@@ -295,4 +187,163 @@ else
 
 Write-Verbose -Message 'Deploy Completed!' -Verbose
 #endregion
+}
+
+Function Remove-DemoVMs
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$VMNames
+    )
+
+    Foreach ($VMName in $VMNames)
+    {
+        $VM = Get-VM -Name $VMName -ErrorAction SilentlyContinue
+        if ($VM -eq $null)
+        {
+            Write-Warning -Message "$($VMName): Virtual Machine could not be found!"
+            Break
+        }
+
+        Write-Verbose -Message "$($VMName): Virtual Machine was found with state [$($VM.state)]!" -Verbose
+
+        if ($VM.state -eq 'Running')
+        {
+            Write-Warning -Message "$($VMName): Virtual Machine was found in state [$($VM.state)]!"
+            if ((Read-Question -Question "Would you like to continue to remove $vmname ?") -eq 1)
+            {
+                Write-Warning -Message "$($VMName): Virtual Machine removal was aborted!"
+                break
+            }
+
+        }
+
+        if ($VM.state -ne 'Off')
+        {
+            Write-Verbose -Message "$($VMName): Attempting to stop Virtual Machine! Previous state [$($VM.state)]" -Verbose
+            $null = Stop-VM -Name $VMName -Force
+        }
+
+        if ($VM.state -ne 'Off')
+        {
+            Write-Warning -Message "$($VMName): Virtual Machine is still running! Please resolve the issues and then try again!"
+            Break
+        }
+
+        $VMLocation = $VM.Path
+
+        Write-Verbose -Message "$($VMName): Removing Virtual Machine Configuration" -Verbose
+        $null = Remove-VM -Name $VMName -Force
+
+        Write-Verbose -Message "$($VMName): Removing Virtual Machine Directory" -Verbose
+        $null = Remove-Item $VMLocation -Recurse -Force
+
+        Write-Verbose -Message "$($VMName): Remove Completed!" -Verbose
+    }
+}
+
+Function Show-Dropdownbox 
+{
+    <#
+            .SYNOPSIS
+            Gives a pop-up to select data, that can be used in other scripts
+            .DESCRIPTION
+            The Show-Dropdownbox function is used to provide a friendly way for users to input data into script variables.
+            This script is for example used during the postbuild script, so that information can be injected in a friendly way.
+            .PARAMETER Question
+            The question you want to have displayed on screen.
+            .PARAMETER Answers
+            The answers you would like the users to have as options. (Static list)
+            .EXAMPLE
+            $variable1 = Show-Dropdownbox -question "Select one of the following:" -answers "A","B","C"
+            Create a question and write the output to variable $variable1
+            .NOTES
+            This function was created for friendly input into scripts that are performed manually.
+            Do not use this function in scripts that should run in the background.
+            This script was written by Danny den Braver @2013, for questions please contact danny@denbraver.com
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Question,
+        [Parameter(Mandatory = $true)]
+        [array]$Answers
+    )
+
+    [void][System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')
+    [void][System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') 
+
+    $objForm = New-Object -TypeName System.Windows.Forms.Form 
+    $objForm.Text = 'Take your selection'
+    $objForm.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (300, 275) 
+    $objForm.StartPosition = 'CenterScreen'
+    $objForm.KeyPreview = $true
+    $objForm.Add_KeyDown({
+            if ($_.KeyCode -eq 'Enter') 
+            {
+                $objForm.Close()
+            }
+    })
+    $objForm.Add_KeyDown({
+            if ($_.KeyCode -eq 'Escape') 
+            {
+                $objForm.Close()
+            }
+    })
+    
+    $OKButton = New-Object -TypeName System.Windows.Forms.Button
+    $OKButton.Location = New-Object -TypeName System.Drawing.Size -ArgumentList (75, 200)
+    $OKButton.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (75, 23)
+    $OKButton.Text = 'OK'
+    $OKButton.Add_Click({
+            $objForm.Close()
+    })
+    $objForm.Controls.Add($OKButton)
+
+    $CancelButton = New-Object -TypeName System.Windows.Forms.Button
+    $CancelButton.Location = New-Object -TypeName System.Drawing.Size -ArgumentList (150, 200)
+    $CancelButton.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (75, 23)
+    $CancelButton.Text = 'Cancel'
+    $CancelButton.Add_Click({
+            $objForm.Close()
+    })
+    $objForm.Controls.Add($CancelButton)
+
+    $objLabel = New-Object -TypeName System.Windows.Forms.Label
+    $objLabel.Location = New-Object -TypeName System.Drawing.Size -ArgumentList (10, 20) 
+    $objLabel.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (280, 20) 
+    $objLabel.Text = $Question
+    $objForm.Controls.Add($objLabel) 
+
+    $objListBox = New-Object -TypeName System.Windows.Forms.ListBox 
+    $objListBox.Location = New-Object -TypeName System.Drawing.Size -ArgumentList (10, 40) 
+    $objListBox.Size = New-Object -TypeName System.Drawing.Size -ArgumentList (275, 20) 
+    $objListBox.Height = 150
+    foreach ($answer in $Answers) 
+    {
+        [void]$objListBox.Items.Add($answer)
+    }
+
+    $objListBox.SelectedItem = $objListBox.Items[0]
+    $objForm.Controls.Add($objListBox) 
+    $objForm.Topmost = $true
+    $objForm.Add_Shown({
+            $objForm.Activate()
+    })
+    [void]$objForm.ShowDialog()
+
+    $objListBox.SelectedItem
+}
+
+Function Read-Question
+{
+    param(
+    [Parameter(Mandatory = $true)]
+    [string]$Question
+    )
+
+    $subject = 'Read-Question'
+    $yes = New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList '&Yes', ''
+    $no = New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList '&No', ''
+    $choices = [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no)
+    $Host.UI.PromptForChoice($subject,$Question,$choices,1)
 }
