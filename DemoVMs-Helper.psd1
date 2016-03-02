@@ -1,10 +1,10 @@
-﻿# Module manifest for module 'DemoVMs.psm1'
+﻿# Module manifest for module 'DemoVMs-Helper.psm1'
 #
 # Created by: Danny den Braver
 @{
 
 # Script module or binary module file associated with this manifest
-ModuleToProcess = 'DemoVMs.psm1'
+ModuleToProcess = 'DemoVMs-Helper.psm1'
 
 # Version number of this module.
 ModuleVersion = '1.4.0.0'
@@ -76,7 +76,7 @@ AliasesToExport = '*'
 ModuleList = @()
 
 # List of all files packaged with this module
-FileList = @('DemoVMs.psm1')
+FileList = @('DemoVMs-Helper.psm1')
 
 # Private data to pass to the module specified in ModuleToProcess
 PrivateData = ''
