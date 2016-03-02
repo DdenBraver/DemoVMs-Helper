@@ -15,7 +15,20 @@
     [Parameter(Mandatory = $true)]
     [int]$Generation,
 
-    [System.Int64]$Memory = 2GB
+    [Parameter(Mandatory = $false)]
+    [int]$Datadisks = 0,
+
+    [Parameter(Mandatory = $false)]
+    [System.Int64]$Datadisksize = 40GB,
+
+    [Parameter(Mandatory = $false)]
+    [System.Int64]$Memory = 2GB,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Snapshot,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Snapshotname = 'Clean Build'
 )
 
 #region runas administrator
@@ -207,17 +220,6 @@ else
 
 #endregion
 
-#region snapshot
-if ((Read-Question -Question 'Would you like a snapshot for the Virtual Machines?') -eq '0')
-{
-    $Snapshot = $true
-}
-else
-{
-    $Snapshot = $false
-}
-#endregion
-
 #region scanning images from imagelocation
 try
 {
@@ -228,15 +230,15 @@ catch
 {}
 
 $imageextension = $Imagename.Split('.') | Select-Object -last 1
-
-if (!$Imagename)
-{
-Write-Warning "No images could be found in location $ImagesLocation, please select a different location using [DeployDemoVMs.ps1 -ImagesLocation 'Your Images Location']"
-break
-}
 #endregion
 
 #region create virtual machines
+if (!$Imagename)
+{
+    Write-Warning "No images could be found in location $ImagesLocation, please select a different location using [DeployDemoVMs.ps1 -ImagesLocation 'Your Images Location']"
+    break
+}
+
 else
 {
     foreach ($VM in $VMName)
@@ -255,14 +257,35 @@ else
  
         Write-Verbose -Message "$($VM): Adding differencing disk to Virtual Machine" -Verbose
         $null = Get-VM -name $VM | Add-VMHardDiskDrive -Path "$VMsLocation\$VM\C-Drive.$($imageextension)"
+
+        if ($Generation -eq 2)
+        {
+            Write-Verbose -Message "$($VM): Changing Harddisk to first boot device" -Verbose
+            $null = get-vm $VM | Set-VMFirmware -FirstBootDevice (Get-VMHardDiskDrive -VMName $VM)
+        }
+
+        if ($Datadisks -ne 0)
+        {
+            $i = 0
+            do
+            {
+                $i++
+                Write-Verbose -Message "$($VM): Creating data disk $i" -Verbose
+                $null = New-VHD -Path "$VMsLocation\$VM\DataDisk$($i).$($imageextension)" -Dynamic -SizeBytes $Datadisksize
+
+                Write-Verbose -Message "$($VM): Adding data disk $i to Virtual Machine" -Verbose
+                $null = Get-VM -name $VM | Add-VMHardDiskDrive -Path "$VMsLocation\$VM\DataDisk$($i).$($imageextension)"
+            }
+            until ($Datadisks -eq $i)
+        }
  
         Write-Verbose -Message "$($VM): Changing configuration to $ProcessorCount vCPUs and $($Memory/1gb)GB Memory" -Verbose
         $null = Get-VM -name $VM | Set-VM -ProcessorCount $ProcessorCount -DynamicMemory -MemoryMaximumBytes $Memory -Passthru | start-VM
  
         if ($Snapshot)
         {
-            Write-Verbose -Message "$($VM): Creating 'Clean Build' Snapshot" -Verbose
-            $null = Get-VM -name $VM | Checkpoint-VM -SnapshotName 'Clean Build'
+            Write-Verbose -Message "$($VM): Creating '$Snapshotname' Snapshot" -Verbose
+            $null = Get-VM -name $VM | Checkpoint-VM -SnapshotName $Snapshotname
         }
     }
 }
