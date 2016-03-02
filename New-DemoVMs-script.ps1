@@ -34,12 +34,11 @@
 )
 
 #region runas administrator
-If (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator'))
-{   
-	Write-Warning 'System: This script is currently not running as administrator. Script will now automatically restart.'
-    pause
-	Start-Process powershell -Verb runAs -ArgumentList $myinvocation.mycommand.definition
-	Break
+If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(`
+    [Security.Principal.WindowsBuiltInRole] “Administrator”))
+{
+    Write-Warning “You do not have Administrator rights to run this script!`nPlease re-run this script as an Administrator!”
+    Break
 }
 #endregion
 
