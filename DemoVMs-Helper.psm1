@@ -359,3 +359,61 @@ Function Read-Question
     $choices = [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no)
     $Host.UI.PromptForChoice($subject,$Question,$choices,1)
 }
+
+Function Set-DemoVMsIP
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$VMName,
+
+        [Parameter(Mandatory = $true)]
+        [string]$IPAddress,
+
+        [Parameter(Mandatory = $false)]
+        [string]$Subnet = '255.255.255.0',
+
+        [Parameter(Mandatory = $false)]
+        [string]$Gateway,
+
+        [Parameter(Mandatory = $false)]
+        [string[]]$DNS
+    )
+
+    #region runas administrator
+    If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(`
+    [Security.Principal.WindowsBuiltInRole] 'Administrator'))
+    {
+        Write-Warning -Message "You do not have Administrator rights to run this script!`nPlease re-run this script as an Administrator!"
+        Break
+    }
+    #endregion
+
+    $VSManService = Get-WmiObject -Namespace root\virtualization\v2 -Class Msvm_VirtualSystemManagementService
+    
+    $getVMobj = Get-WmiObject -Namespace 'root\virtualization\v2' -Class 'msvm_computersystem' | Where-Object -FilterScript {
+        $_.ElementName -like "*$VMName*"
+    }
+
+    $VMSettings = $getVMobj.GetRelated('MSVM_VirtualSystemSettingData') | Where-Object -FilterScript {
+        $_.VirtualSystemType -eq 'Microsoft:Hyper-V:System:Realized'
+    }
+
+    $VMNetAdapter = $VMSettings.GetRelated('Msvm_SyntheticEthernetPortSettingData')
+    $VMNetSettings = $VMNetAdapter.GetRelated('msvm_guestnetworkadapterconfiguration') 
+    $LANSettings = $VMNetSettings | Select-Object -First 1
+
+
+    Write-Verbose -Message "$($VMName): Changing IP for Server to $IPAddress" -Verbose
+    $LANSettings.DHCPEnabled = $false
+    $LANSettings.IPAddresses = "$IPAddress"
+    $LANSettings.Subnets = "$Subnet"
+    if ($Gateway)
+    {
+        $LANSettings.DefaultGateways = $Gateway
+    }
+    if ($DNS)
+    {
+        $LANSettings.DNSServers = $DNS
+    }
+    $null = $VSManService.SetGuestNetworkAdapterConfiguration($getVMobj.Path, $LANSettings.GetText(1))
+}
